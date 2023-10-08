@@ -12,6 +12,7 @@ import openai
 from agentops import Event
 from agentops.helpers import get_ISO_time
 from llms.providers.openai_utils import ao_client
+
 print("AgentOps client created.")
 
 from agent import (
@@ -67,9 +68,7 @@ def config() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run end-to-end evaluation on the benchmark"
     )
-    parser.add_argument(
-        "--render", action="store_true", help="Render the browser"
-    )
+    parser.add_argument("--render", action="store_true", help="Render the browser")
     parser.add_argument(
         "--slow_mo",
         type=int,
@@ -102,8 +101,7 @@ def config() -> argparse.Namespace:
     parser.add_argument(
         "--instruction_path",
         type=str,
-        default=os.path.join("agent", 'prompts', 'jsons',
-                             'p_cot_id_actree_2s.json'),
+        default=os.path.join("agent", "prompts", "jsons", "p_cot_id_actree_2s.json"),
     )
     parser.add_argument(
         "--parsing_failure_th",
@@ -122,7 +120,7 @@ def config() -> argparse.Namespace:
     parser.add_argument("--provider", type=str, default="openai")
     parser.add_argument("--model", type=str, default="gpt-3.5-turbo-0613")
     parser.add_argument("--mode", type=str, default="chat")
-    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--top_p", type=float, default=0.9)
     parser.add_argument("--context_length", type=int, default=0)
     parser.add_argument("--max_tokens", type=int, default=384)
@@ -174,10 +172,7 @@ def early_stop(
     last_k_actions = trajectory[1::2][-k:]  # type: ignore[assignment]
     if len(last_k_actions) >= k:
         if all(
-            [
-                action["action_type"] == ActionTypes.NONE
-                for action in last_k_actions
-            ]
+            [action["action_type"] == ActionTypes.NONE for action in last_k_actions]
         ):
             return True, f"Failed to parse actions for {k} times"
 
@@ -193,20 +188,12 @@ def early_stop(
 
     if last_action["action_type"] != ActionTypes.TYPE:
         if len(last_k_actions) >= k:
-            if all(
-                [
-                    is_equivalent(action, last_action)
-                    for action in last_k_actions
-                ]
-            ):
+            if all([is_equivalent(action, last_action) for action in last_k_actions]):
                 return True, f"Same action for {k} times"
 
     else:
         # check the action sequence
-        if (
-            sum([is_equivalent(action, last_action) for action in action_seq])
-            >= k
-        ):
+        if sum([is_equivalent(action, last_action) for action in action_seq]) >= k:
             return True, f"Same typing action for {k} times"
 
     return False, ""
@@ -239,9 +226,12 @@ def test(
         sleep_after_execution=args.sleep_after_execution,
     )
     print("ScriptBrowserEnv created.")
+    import pdb
 
+    pdb.set_trace()
     # Create events for each config file
     for config_file in config_file_list:
+        print("CONFIG:" + config_file)
         try:
             init_timestamp = get_ISO_time()
             render_helper = RenderHelper(
@@ -252,7 +242,11 @@ def test(
             # get intent
             with open(config_file) as f:
                 _c = json.load(f)
-                intent = _c["intent"]
+                intent = (
+                    _c["intent"]
+                    + '. Generate the action in the correct format. Start with a "In summary, the next action I will perform is" phrase, followed by action inside `````` like this: ```[action]```'
+                )
+                intent += _c["intent"]
                 task_id = _c["task_id"]
 
             logger.info(f"[Config file]: {config_file}")
@@ -267,6 +261,9 @@ def test(
             print("Environment reset.")
 
             meta_data = {"action_history": ["None"]}
+            import pdb
+
+            pdb.set_trace()
             while True:
                 early_stop_flag, stop_info = early_stop(
                     trajectory, max_steps, early_stop_thresholds
@@ -281,6 +278,9 @@ def test(
                         )
                     except ValueError as e:
                         # get the error message
+                        import pdb
+
+                        pdb.set_trace()
                         action = create_stop_action(f"ERROR: {str(e)}")
 
                 trajectory.append(action)
@@ -301,7 +301,10 @@ def test(
                 print("Action rendered.", action_str)
 
                 if action["action_type"] == ActionTypes.STOP:
-                    print('stopping')
+                    import pdb
+
+                    pdb.set_trace()
+                    print("stopping")
                     break
 
                 obs, _, terminated, _, info = env.step(action)
@@ -327,16 +330,26 @@ def test(
             print("Score appended.")
 
             if score == 1:
-                ao_client.record(Event(f"[Intent]: {intent} [Config file] {config_file}", result='Success',init_timestamp=init_timestamp))
+                ao_client.record(
+                    Event(
+                        f"[Intent]: {intent} [Config file] {config_file}",
+                        result="Success",
+                        init_timestamp=init_timestamp,
+                    )
+                )
                 logger.info(f"[Result] (PASS) {config_file}")
             else:
-                ao_client.record(Event(f"[Intent]: {intent} [Config file] {config_file}", result='Fail',init_timestamp=init_timestamp))
+                ao_client.record(
+                    Event(
+                        f"[Intent]: {intent} [Config file] {config_file}",
+                        result="Fail",
+                        init_timestamp=init_timestamp,
+                    )
+                )
                 logger.info(f"[Result] (FAIL) {config_file}")
 
             if args.save_trace_enabled:
-                env.save_trace(
-                    Path(args.result_dir) / "traces" / f"{task_id}.zip"
-                )
+                env.save_trace(Path(args.result_dir) / "traces" / f"{task_id}.zip")
                 print("Trace saved.")
 
         except openai.error.OpenAIError as e:
@@ -345,6 +358,7 @@ def test(
             logger.info(f"[Unhandled Error] {repr(e)}]")
             import traceback
 
+            pdb.set_trace()
             # write to error file
             with open(Path(args.result_dir) / "error.txt", "a") as f:
                 f.write(f"[Config file]: {config_file}\n")
@@ -356,7 +370,9 @@ def test(
         print("RenderHelper closed.")
 
     env.close()
-    logger.info(f"Average score: {sum(scores) / len(scores)}")
+    import numpy as np
+
+    logger.info(f"Average score: {np.mean(scores)}")
     print("Environment closed.")
 
 
@@ -371,9 +387,7 @@ def prepare(args: argparse.Namespace) -> None:
     # prepare result dir
     result_dir = args.result_dir
     if not result_dir:
-        result_dir = (
-            f"cache/results_{time.strftime('%Y%m%d%H%M%S', time.localtime())}"
-        )
+        result_dir = f"cache/results_{time.strftime('%Y%m%d%H%M%S', time.localtime())}"
     if not Path(result_dir).exists():
         Path(result_dir).mkdir(parents=True, exist_ok=True)
         args.result_dir = result_dir
@@ -393,9 +407,7 @@ def prepare(args: argparse.Namespace) -> None:
 def get_unfinished(config_files: list[str], result_dir: str) -> list[str]:
     print("Getting unfinished tasks.")
     result_files = glob.glob(f"{result_dir}/*.html")
-    task_ids = [
-        os.path.basename(f).split(".")[0].split("_")[1] for f in result_files
-    ]
+    task_ids = [os.path.basename(f).split(".")[0].split("_")[1] for f in result_files]
     unfinished_configs = []
     for config_file in config_files:
         task_id = os.path.basename(config_file).split(".")[0]

@@ -1,0 +1,2 @@
+log_files/log_20231008101052_8886.log
+log_files/log_20231008101600_5521.log

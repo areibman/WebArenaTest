@@ -19,7 +19,8 @@ from browser_env.utils import Observation, StateInfo
 from llms import lm_config
 from llms.providers.openai_utils import (
     generate_from_openai_chat_completion,
-    generate_from_openai_completion, ao_client
+    generate_from_openai_completion,
+    ao_client,
 )
 
 
@@ -73,12 +74,10 @@ class TeacherForcingAgent(Agent):
                 elif self.action_set_tag == "id_accessibility_tree":
                     cur_action = create_id_based_action(a_str)
                 else:
-                    raise ValueError(
-                        f"Unknown action type {self.action_set_tag}"
-                    )
+                    raise ValueError(f"Unknown action type {self.action_set_tag}")
             except ActionParsingError as e:
                 print("Error parsing action in TeacherForcingAgent")
-                ao_client.record(event=Event('Set actions', result='Fail'))
+                ao_client.record(event=Event("Set actions", result="Fail"))
                 cur_action = create_none_action()
 
             cur_action["raw_prediction"] = a_str
@@ -132,9 +131,7 @@ class PromptAgent(Agent):
     ) -> Action:
         init_timestamp = get_ISO_time()
         print("Predicting next action in PromptAgent")
-        prompt = self.prompt_constructor.construct(
-            trajectory, intent, meta_data
-        )
+        prompt = self.prompt_constructor.construct(trajectory, intent, meta_data)
         lm_config = self.lm_config
         if lm_config.provider == "openai":
             print("Generating response from OpenAI in PromptAgent")
@@ -158,15 +155,17 @@ class PromptAgent(Agent):
                     stop_token=lm_config.gen_config["stop_token"],
                 )
             else:
-                ao_client.record(event=Event('Next action', result='Fail', init_timestamp=init_timestamp))
-                raise ValueError(
-                    f"OpenAI models do not support mode {lm_config.mode}"
+                ao_client.record(
+                    event=Event(
+                        "Next action", result="Fail", init_timestamp=init_timestamp
+                    )
                 )
+                raise ValueError(f"OpenAI models do not support mode {lm_config.mode}")
         else:
-            ao_client.record(event=Event('Next action', result='Fail', init_timestamp=init_timestamp))
-            raise NotImplementedError(
-                f"Provider {lm_config.provider} not implemented"
+            ao_client.record(
+                event=Event("Next action", result="Fail", init_timestamp=init_timestamp)
             )
+            raise NotImplementedError(f"Provider {lm_config.provider} not implemented")
 
         try:
             print("Parsing response in PromptAgent")
@@ -187,7 +186,9 @@ class PromptAgent(Agent):
 
         except ActionParsingError as e:
             print("Error parsing action in PromptAgent", e)
-            ao_client.record(event=Event('Next action', result='Fail',init_timestamp=init_timestamp))
+            ao_client.record(
+                event=Event("Next action", result="Fail", init_timestamp=init_timestamp)
+            )
             action = create_none_action()
             action["raw_prediction"] = response
 
@@ -222,10 +223,10 @@ def construct_agent(args: argparse.Namespace) -> Agent:
 
     agent: Agent
     if args.agent_type == "teacher_forcing":
-        print('Creating TeacherForcingAgent')
+        print("Creating TeacherForcingAgent")
         agent = TeacherForcingAgent()
     elif args.agent_type == "prompt":
-        print('Creating PromptAgent')
+        print("Creating PromptAgent")
         with open(args.instruction_path) as f:
             constructor_type = json.load(f)["meta_data"]["prompt_constructor"]
             print(constructor_type)
@@ -239,7 +240,5 @@ def construct_agent(args: argparse.Namespace) -> Agent:
             prompt_constructor=prompt_constructor,
         )
     else:
-        raise NotImplementedError(
-            f"agent type {args.agent_type} not implemented"
-        )
+        raise NotImplementedError(f"agent type {args.agent_type} not implemented")
     return agent
